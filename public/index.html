@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trivia Question Uploader</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px;
+    }
+    h1 {
+      margin-bottom: 20px;
+    }
+    input, textarea {
+      width: 100%;
+      max-width: 650px;
+      padding: 12px;
+      border-radius: 10px;
+      border: none;
+      outline: none;
+      background: #222;
+      color: #eee;
+      margin-bottom: 16px;
+      font-size: 16px;
+    }
+    button {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 10px;
+      background: #4caf50;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #43a047;
+    }
+    #toast {
+      margin-top: 20px;
+      padding: 15px;
+      background: #333;
+      border-radius: 8px;
+      display: none;
+      max-width: 650px;
+      font-size: 15px;
+    }
+    .success { background: #2e7d32; }
+    .error { background: #c62828; }
+  </style>
+</head>
+<body>
+
+  <h1>Trivia Upload Tool</h1>
+
+  <input id="triviaId" placeholder="Enter triviaId (e.g., genz_trivia_1)" />
+
+  <textarea id="jsonInput" rows="12" placeholder="Paste your JSON here"></textarea>
+
+  <button onclick="uploadQuestions()">Upload Questions</button>
+
+  <div id="toast"></div>
+
+  <script>
+    async function uploadQuestions() {
+      const triviaId = document.getElementById("triviaId").value.trim();
+      const jsonText = document.getElementById("jsonInput").value.trim();
+      const toast = document.getElementById("toast");
+
+      if (!triviaId) {
+        showToast("Please enter a triviaId.", "error");
+        return;
+      }
+
+      let questions;
+      try {
+        questions = JSON.parse(jsonText);
+        if (!Array.isArray(questions)) throw new Error();
+      } catch {
+        showToast("Invalid JSON format.", "error");
+        return;
+      }
+
+      const functionUrl =
+        "https://us-central1-emojivia-f5bd5.cloudfunctions.net/createTriviaQuestions";
+
+      try {
+        const res = await fetch(functionUrl + "?triviaId=" + triviaId, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(questions),
+        });
+
+        const result = await res.json();
+
+        if (res.ok) {
+          showToast("✔ Questions uploaded successfully!", "success");
+        } else {
+          showToast("❌ Error: " + (result.message || "Failed"), "error");
+        }
+      } catch (err) {
+        showToast("❌ Network error: " + err.message, "error");
+      }
+    }
+
+    function showToast(message, type) {
+      const toast = document.getElementById("toast");
+      toast.innerText = message;
+      toast.className = type;
+      toast.style.display = "block";
+
+      setTimeout(() => {
+        toast.style.display = "none";
+      }, 4000);
+    }
+  </script>
+</body>
+</html>
