@@ -5,6 +5,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AI Trivia Generator</title>
+  <!-- Load config file with API keys (git-ignored) -->
+  <script src="config.js"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -81,9 +83,27 @@
   <div id="toast"></div>
 
   <script>
-    // ⚠️ IMPORTANT: Never commit API keys to git!
-    // In production, use environment variables or a secure backend
-    const OPENAI_API_KEY = "YOUR_OPENAI_API_KEY_HERE";
+    // API key is fetched from Firestore on page load
+    let OPENAI_API_KEY = null;
+    let apiKeyLoaded = false;
+
+    // Fetch API key from Firestore when page loads
+    async function initializeApiKey() {
+      try {
+        showToast("🔑 Loading API key from Firestore...", "success");
+        OPENAI_API_KEY = await CONFIG.fetchApiKey();
+        apiKeyLoaded = true;
+        showToast("✅ API key loaded successfully!", "success");
+        console.log("✅ OpenAI API key loaded from Firestore");
+      } catch (error) {
+        console.error("Failed to load API key:", error);
+        showToast("⚠️ Failed to load API key from Firestore. Please check your Firebase configuration.", "error");
+        apiKeyLoaded = false;
+      }
+    }
+
+    // Initialize API key on page load
+    initializeApiKey();
 
     // 🔥 Automatically create triviaId like <topic>_trivia_<nextIndex>
     async function generateTriviaId(topic) {
@@ -124,6 +144,11 @@
       if (!count || isNaN(count)) count = 40;
 
       if (!topic) return showToast("Please enter a topic.", "error");
+
+      // Check if API key is loaded
+      if (!apiKeyLoaded || !OPENAI_API_KEY) {
+        return showToast("⚠️ API key not loaded yet. Please wait or refresh the page.", "error");
+      }
 
       showToast("⏳ Generating trivia ID...", "success");
 
