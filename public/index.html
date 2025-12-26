@@ -44,10 +44,63 @@
       font-size: 16px;
       cursor: pointer;
       margin-top: 10px;
+      transition: all 0.3s ease;
     }
 
-    button:hover {
+    button:hover:not(:disabled) {
       background: #43a047;
+      transform: scale(1.05);
+    }
+
+    button:disabled {
+      background: #555;
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    #loadingContainer {
+      margin-top: 30px;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .spinner {
+      border: 4px solid #333;
+      border-top: 4px solid #4caf50;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    #loadingText {
+      font-size: 16px;
+      color: #4caf50;
+      text-align: center;
+      max-width: 650px;
+    }
+
+    #progressBar {
+      width: 100%;
+      max-width: 650px;
+      height: 6px;
+      background: #333;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    #progressFill {
+      height: 100%;
+      background: linear-gradient(90deg, #4caf50, #81c784);
+      width: 0%;
+      transition: width 0.5s ease;
     }
 
     #toast {
@@ -74,175 +127,24 @@
 
   <h1>AI Trivia Generator</h1>
 
-  <input id="triviaId" placeholder="Enter triviaId (e.g., genz_trivia_1)" />
+  <input id="categoryInput" placeholder="Enter category (e.g., genz, geography)" />
   <input id="topicInput" placeholder="Enter topic (e.g., Gen Alpha slang)" />
-  <input id="countInput" placeholder="How many questions? (Default: 40)" />
+  <input id="countInput" placeholder="How many questions? (Default: 100)" />
 
-  <button onclick="generateAndUpload()">Generate & Upload</button>
+  <button id="generateBtn" onclick="generateAndUpload()">Generate & Upload</button>
+
+  <div id="loadingContainer">
+    <div class="spinner"></div>
+    <div id="loadingText">Initializing...</div>
+    <div id="progressBar">
+      <div id="progressFill"></div>
+    </div>
+  </div>
 
   <div id="toast"></div>
 
-  <script>
-    // API key is fetched from Firestore on page load
-    let OPENAI_API_KEY = null;
-    let apiKeyLoaded = false;
-
-    // Fetch API key from Firestore when page loads
-    async function initializeApiKey() {
-      try {
-        showToast("🔑 Loading API key from Firestore...", "success");
-        OPENAI_API_KEY = await CONFIG.fetchApiKey();
-        apiKeyLoaded = true;
-        showToast("✅ API key loaded successfully!", "success");
-        console.log("✅ OpenAI API key loaded from Firestore");
-      } catch (error) {
-        console.error("Failed to load API key:", error);
-        showToast("⚠️ Failed to load API key from Firestore. Please check your Firebase configuration.", "error");
-        apiKeyLoaded = false;
-      }
-    }
-
-    // Initialize API key on page load
-    initializeApiKey();
-
-    // 🔥 Automatically create triviaId like <topic>_trivia_<nextIndex>
-    async function generateTriviaId(topic) {
-      const sanitized = topic
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "_")
-        .replace(/^_+|_+$/g, "");
-
-      const prefix = sanitized + "_trivia_";
-
-      // Firestore REST API
-      const url =
-        "https://firestore.googleapis.com/v1/projects/emojivia-f5bd5/databases/(default)/documents/trivia";
-
-      const res = await fetch(url);
-      const data = await res.json();
-
-      if (!data.documents) return prefix + "1";
-
-      let maxIndex = 0;
-
-      for (const doc of data.documents) {
-        const fullName = doc.name.split("/").pop(); // extract document ID
-
-        if (fullName.startsWith(prefix)) {
-          const num = parseInt(fullName.replace(prefix, ""), 10);
-          if (!isNaN(num) && num > maxIndex) maxIndex = num;
-        }
-      }
-
-      const nextId = maxIndex + 1;
-      return prefix + nextId;
-    }
-
-    async function generateAndUpload() {
-      const topic = document.getElementById("topicInput").value.trim();
-      let count = parseInt(document.getElementById("countInput").value.trim());
-      if (!count || isNaN(count)) count = 40;
-
-      if (!topic) return showToast("Please enter a topic.", "error");
-
-      // Check if API key is loaded
-      if (!apiKeyLoaded || !OPENAI_API_KEY) {
-        return showToast("⚠️ API key not loaded yet. Please wait or refresh the page.", "error");
-      }
-
-      showToast("⏳ Generating trivia ID...", "success");
-
-      // 🔥 Step 1: auto-generate triviaId
-      const triviaId = await generateTriviaId(topic);
-
-      showToast("✨ Trivia ID created: " + triviaId, "success");
-
-      // 🔥 Step 2: Generate questions from OpenAI
-      showToast("🤖 Generating trivia using AI...", "success");
-
-      const systemPrompt = `
-You create emoji-only trivia questions.
-Return ONLY a JSON array. Format:
-[
-  {
-    "id": 1,
-    "question": "💀😂📱",
-    "options": ["NPC moment", "I’m dead (laughing)", "Phone lag", "L take"],
-    "answer": "I’m dead (laughing)"
-  }
-]
-
-Rules:
-- JSON array only.
-- id starts at 1.
-- question is ONLY emojis.
-- 4 options.
-- answer must match one option exactly.
-Topic: ${topic}
-`;
-
-      const userPrompt = `Generate ${count} questions for topic: ${topic}`;
-
-      let aiJson;
-
-      try {
-        const response = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${OPENAI_API_KEY}`
-          },
-          body: JSON.stringify({
-            model: "gpt-4.1-mini",
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: userPrompt }
-            ],
-            max_tokens: 4000
-          })
-        });
-
-        const data = await response.json();
-        aiJson = JSON.parse(data.choices[0].message.content);
-
-      } catch (e) {
-        return showToast("❌ AI generation error: " + e.message, "error");
-      }
-
-      showToast("⬆️ Uploading generated questions...", "success");
-
-      // 🔥 Step 3: Upload to Firestore using Cloud Function
-      const cloudFn =
-        "https://us-central1-emojivia-f5bd5.cloudfunctions.net/createTriviaQuestions";
-
-      try {
-        const res = await fetch(cloudFn + "?triviaId=" + triviaId, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(aiJson),
-        });
-
-        const result = await res.json();
-
-        if (res.ok) {
-          showToast("🎉 Trivia saved: " + triviaId, "success");
-        } else {
-          showToast("❌ Upload failed: " + (result.message || "Unknown error"), "error");
-        }
-      } catch (err) {
-        showToast("❌ Network error: " + err.message, "error");
-      }
-    }
-
-    function showToast(message, type) {
-      const toast = document.getElementById("toast");
-      toast.innerText = message;
-      toast.className = type;
-      toast.style.display = "block";
-      setTimeout(() => (toast.style.display = "none"), 4000);
-    }
-  </script>
-
+  <!-- Main application script -->
+  <script src="app.js"></script>
 
 </body>
 

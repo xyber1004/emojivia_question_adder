@@ -6,6 +6,16 @@ const db = admin.firestore();
 
 // ================= Create Trivia Questions Function ================= //
 exports.createTriviaQuestions = functions.https.onRequest(async (req, res) => {
+  // Set CORS headers
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Content-Type");
+  // Handle preflight request
+  if (req.method === "OPTIONS") {
+    res.status(204).send("");
+    return;
+  }
+
   try {
     if (req.method !== "POST") {
       res.status(405).send("Method Not Allowed");
