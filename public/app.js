@@ -61,7 +61,7 @@ async function generateAndUpload() {
   let count = parseInt(document.getElementById("countInput").value.trim());
   if (!count || isNaN(count)) count = 50; // Reduced default from 100 to 50
 
-  if (!category) return showToast("Please enter a category.", "error");
+  if (!category) return showToast("Please select a category.", "error");
   if (!topic) return showToast("Please enter a topic.", "error");
   if (count > 100) {
     showToast("⚠️ Maximum 100 questions allowed per generation.", "error");
@@ -295,7 +295,7 @@ async function generateAndUploadDailyMission() {
   if (!count || isNaN(count)) count = 50;
 
   if (!dateInput) return showToast("Please select a date.", "error");
-  if (!category) return showToast("Please enter a category.", "error");
+  if (!category) return showToast("Please select a category.", "error");
   if (!topic) return showToast("Please enter a topic.", "error");
   if (count > 100) {
     showToast("⚠️ Maximum 100 questions allowed per generation.", "error");
@@ -528,3 +528,92 @@ function disableDailyButton(disabled) {
   btn.disabled = disabled;
   btn.innerText = disabled ? "⏳ Generating..." : "Generate & Upload Daily Mission";
 }
+
+// 🔥 Fetch available categories from Firestore and populate dropdowns
+async function fetchCategories() {
+  try {
+    // Fetch all documents in the categories collection
+    const url = "https://firestore.googleapis.com/v1/projects/emojivia-f5bd5/databases/(default)/documents/categories";
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      console.error("Failed to fetch categories. Status:", response.status);
+      const errorText = await response.text();
+      console.error("Error response:", errorText);
+      return [];
+    }
+    
+    const data = await response.json();
+    console.log("Fetched categories collection:", data);
+
+    if (!data.documents || data.documents.length === 0) {
+      console.error("No documents found in categories collection");
+      return [];
+    }
+
+    // Get the first document (should be SMQBUphyv9T1MbsSqZ based on your screenshot)
+    const categoryDoc = data.documents[0];
+    console.log("Category document:", categoryDoc);
+    console.log("Fields:", categoryDoc.fields);
+
+    if (!categoryDoc.fields) {
+      console.error("No fields found in document");
+      return [];
+    }
+
+    if (!categoryDoc.fields.categories) {
+      console.error("No 'categories' field found. Available fields:", Object.keys(categoryDoc.fields));
+      return [];
+    }
+
+    if (!categoryDoc.fields.categories.arrayValue) {
+      console.error("'categories' is not an array. Type:", categoryDoc.fields.categories);
+      return [];
+    }
+
+    if (!categoryDoc.fields.categories.arrayValue.values) {
+      console.error("Array has no values");
+      return [];
+    }
+
+    // Extract category values from the array
+    const categories = categoryDoc.fields.categories.arrayValue.values.map(v => v.stringValue);
+    console.log("Extracted categories:", categories);
+    return categories;
+  } catch (error) {
+    console.error("Error fetching categories:", error);
+    return [];
+  }
+}
+
+// 🎨 Format category name for display (e.g., "gen_alpha" → "Gen Alpha")
+function formatCategoryName(category) {
+  return category
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+// 📋 Populate dropdown with categories
+async function populateCategoryDropdowns() {
+  const categories = await fetchCategories();
+  
+  const regularDropdown = document.getElementById("categoryInput");
+  const dailyDropdown = document.getElementById("dailyCategoryInput");
+
+  if (categories.N === 0) {
+    regularDropdown.innerHTML = '<option value="">No categories found</option>';
+    dailyDropdown.innerHTML = '<option value="">No categories found</option>';
+    return;
+  }
+
+  // Create options HTML
+  const optionsHTML = '<option value="">Select a category</option>' + 
+    categories.map(cat => `<option value="${cat}">${formatCategoryName(cat)}</option>`).join('');
+
+  regularDropdown.innerHTML = optionsHTML;
+  dailyDropdown.innerHTML = optionsHTML;
+}
+
+// Initialize categories on page load
+populateCategoryDropdowns();
