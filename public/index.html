@@ -120,6 +120,50 @@
     .error {
       background: #c62828;
     }
+
+    /* Tab Navigation Styles */
+    .tab-container {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 30px;
+    }
+
+    .tab-btn {
+      padding: 12px 30px;
+      border: none;
+      border-radius: 10px;
+      background: #333;
+      color: #fff;
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .tab-btn.active {
+      background: #4caf50;
+    }
+
+    .tab-btn:hover {
+      background: #555;
+    }
+
+    .tab-btn.active:hover {
+      background: #43a047;
+    }
+
+    .content-section {
+      display: none;
+      width: 100%;
+      max-width: 650px;
+    }
+
+    .content-section.active {
+      display: block;
+    }
+
+    .input-container {
+      width: 100%;
+    }
   </style>
 </head>
 
@@ -127,11 +171,32 @@
 
   <h1>AI Trivia Generator</h1>
 
-  <input id="categoryInput" placeholder="Enter category (e.g., genz, geography)" />
-  <input id="topicInput" placeholder="Enter topic (e.g., Gen Alpha slang)" />
-  <input id="countInput" placeholder="How many questions? (Default: 100)" />
+  <!-- Tab Navigation -->
+  <div class="tab-container">
+    <button class="tab-btn active" onclick="switchTab('regular')">Question Creator</button>
+    <button class="tab-btn" onclick="switchTab('daily')">Daily Mission Creator</button>
+  </div>
 
-  <button id="generateBtn" onclick="generateAndUpload()">Generate & Upload</button>
+  <!-- Regular Question Creator -->
+  <div id="regularSection" class="content-section active">
+    <div class="input-container">
+      <input id="categoryInput" placeholder="Enter category (e.g., genz, geography)" />
+      <input id="topicInput" placeholder="Enter topic (e.g., Gen Alpha slang)" />
+      <input id="countInput" placeholder="How many questions? (Default: 100)" />
+      <button id="generateBtn" onclick="generateAndUpload()">Generate & Upload</button>
+    </div>
+  </div>
+
+  <!-- Daily Mission Creator -->
+  <div id="dailySection" class="content-section">
+    <div class="input-container">
+      <input id="dailyDateInput" type="date" placeholder="Select date" />
+      <input id="dailyCategoryInput" placeholder="Enter category (e.g., genz, geography)" />
+      <input id="dailyTopicInput" placeholder="Enter topic (e.g., Gen Alpha slang)" />
+      <input id="dailyCountInput" placeholder="How many questions? (Default: 50)" />
+      <button id="generateDailyBtn" onclick="generateAndUploadDailyMission()">Generate & Upload Daily Mission</button>
+    </div>
+  </div>
 
   <div id="loadingContainer">
     <div class="spinner"></div>

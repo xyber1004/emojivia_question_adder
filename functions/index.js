@@ -133,3 +133,69 @@ exports.seedLevelsV3 = functions.https.onRequest(async (req, res) => {
   await batch.commit();
   res.status(200).send("✅ Levels 1–1500 seeded successfully");
 });
+
+// ============= Create Daily Mission Questions Function ============= //
+exports.createDailyMissionQuestions = functions.https.onRequest(
+    async (req, res) => {
+      // Set CORS headers
+      res.set("Access-Control-Allow-Origin", "*");
+      res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+      res.set("Access-Control-Allow-Headers", "Content-Type");
+      // Handle preflight request
+      if (req.method === "OPTIONS") {
+        res.status(204).send("");
+        return;
+      }
+
+      try {
+        if (req.method !== "POST") {
+          res.status(405).send("Method Not Allowed");
+          return;
+        }
+
+        const date = req.query.date;
+        const mode = req.query.mode; // "guess_mode" or "no_cap_mode"
+
+        if (!date) {
+          res.status(400).send("Missing date");
+          return;
+        }
+
+        if (!mode || (mode !== "guess_mode" &&
+          mode !== "no_cap_mode")) {
+          res.status(400).send(
+              "Invalid mode. Must be 'guess_mode' or 'no_cap_mode'");
+          return;
+        }
+
+        const questions = req.body;
+        if (!Array.isArray(questions)) {
+          res.status(400).send("Body must be an array");
+          return;
+        }
+
+        const batch = db.batch();
+
+        // Firestore structure: daily_missions/{date}/{mode}/{questionId}
+        const col = db
+            .collection("daily_missions")
+            .doc(date)
+            .collection(mode);
+
+        for (const q of questions) {
+          const ref = col.doc(String(q.id));
+          batch.set(ref, {
+            id: q.id,
+            question: q.question,
+            options: q.options.join("|"),
+            answer: q.answer,
+          });
+        }
+
+        await batch.commit();
+        res.send({success: true, mode: mode});
+      } catch (e) {
+        console.error(e);
+        res.status(500).send("Internal error");
+      }
+    });

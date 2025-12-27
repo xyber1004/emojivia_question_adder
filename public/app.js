@@ -243,3 +243,288 @@ function disableButton(disabled) {
   btn.disabled = disabled;
   btn.innerText = disabled ? "⏳ Generating..." : "Generate & Upload";
 }
+
+// ================= Tab Switching ================= //
+function switchTab(tab) {
+  const regularTab = document.querySelector('.tab-btn:nth-child(1)');
+  const dailyTab = document.querySelector('.tab-btn:nth-child(2)');
+  const regularSection = document.getElementById('regularSection');
+  const dailySection = document.getElementById('dailySection');
+
+  if (tab === 'regular') {
+    regularTab.classList.add('active');
+    dailyTab.classList.remove('active');
+    regularSection.classList.add('active');
+    dailySection.classList.remove('active');
+  } else {
+    regularTab.classList.remove('active');
+    dailyTab.classList.add('active');
+    regularSection.classList.remove('active');
+    dailySection.classList.add('active');
+  }
+}
+
+// ================= Daily Mission Functions ================= //
+
+// Check if a daily mission already exists for a date
+async function checkDailyMissionExists(date) {
+  const url =
+    "https://firestore.googleapis.com/v1/projects/emojivia-f5bd5/databases/(default)/documents/daily_missions";
+
+  const res = await fetch(url);
+  const data = await res.json();
+
+  if (!data.documents) return false;
+
+  for (const doc of data.documents) {
+    const docId = doc.name.split("/").pop();
+    if (docId === date) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// Generate and upload daily mission questions
+async function generateAndUploadDailyMission() {
+  const dateInput = document.getElementById("dailyDateInput").value.trim();
+  const category = document.getElementById("dailyCategoryInput").value.trim();
+  const topic = document.getElementById("dailyTopicInput").value.trim();
+  let count = parseInt(document.getElementById("dailyCountInput").value.trim());
+  if (!count || isNaN(count)) count = 50;
+
+  if (!dateInput) return showToast("Please select a date.", "error");
+  if (!category) return showToast("Please enter a category.", "error");
+  if (!topic) return showToast("Please enter a topic.", "error");
+  if (count > 100) {
+    showToast("⚠️ Maximum 100 questions allowed per generation.", "error");
+    count = 100;
+  }
+
+  // Format date to DD-MM-YYYY
+  const [year, month, day] = dateInput.split('-');
+  const formattedDate = `${day}-${month}-${year}`;
+
+  // Check if API key is loaded
+  if (!apiKeyLoaded || !OPENAI_API_KEY) {
+    return showToast("⚠️ API key not loaded yet. Please wait or refresh the page.", "error");
+  }
+
+  // Show loading UI
+  showLoading("🎯 Preparing to generate daily mission...", 5);
+  disableDailyButton(true);
+
+  try {
+    // Step 1: Check if daily mission already exists
+    updateLoading("🔍 Checking if daily mission exists for " + formattedDate + "...", 10);
+    const exists = await checkDailyMissionExists(formattedDate);
+    
+    if (exists) {
+      hideLoading();
+      disableDailyButton(false);
+      return showToast(`❌ Daily mission for ${formattedDate} already exists! Please choose a different date.`, "error");
+    }
+
+    updateLoading("✅ Date available! Proceeding...", 15);
+
+    // Step 2: Generate questions from OpenAI for Guess Mode
+    updateLoading(`🤖 Generating ${count} questions for GUESS MODE...\n⏳ This may take 30-60 seconds...`, 20);
+
+    const systemPrompt = `
+You create emoji-only trivia questions.
+Return ONLY a JSON array. Format:
+[
+  {
+    "id": 1,
+    "question": "💀😂📱",
+    "options": ["NPC moment", "I'm dead (laughing)", "Phone lag", "L take"],
+    "answer": "I'm dead (laughing)"
+  }
+]
+
+Rules:
+- JSON array only.
+- id starts at 1.
+- question is ONLY emojis.
+- 4 options.
+- answer must match one option exactly.
+Topic: ${topic}
+`;
+
+    const userPrompt = `Generate ${count} questions for topic: ${topic}`;
+
+    // Generate Guess Mode questions
+    const guessModeResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        max_tokens: 16000
+      })
+    });
+
+    if (!guessModeResponse.ok) {
+      const errorData = await guessModeResponse.json().catch(() => ({}));
+      hideLoading();
+      disableDailyButton(false);
+      
+      if (guessModeResponse.status === 429) {
+        return showToast("⚠️ Rate limit exceeded. Please wait a few moments and try again.", "error");
+      } else if (guessModeResponse.status === 401) {
+        return showToast("❌ Invalid API key. Please check your configuration.", "error");
+      } else if (guessModeResponse.status === 402) {
+        return showToast("💳 Insufficient quota. Please check your OpenAI billing.", "error");
+      } else {
+        return showToast(`❌ OpenAI API error (${guessModeResponse.status}): ${errorData.error?.message || 'Unknown error'}`, "error");
+      }
+    }
+
+    updateLoading("📥 Receiving Guess Mode response...", 40);
+    const guessModeData = await guessModeResponse.json();
+    
+    const guessModeContent = guessModeData.choices[0].message.content;
+    
+    if (guessModeData.choices[0].finish_reason === 'length') {
+      hideLoading();
+      disableDailyButton(false);
+      return showToast("⚠️ Guess Mode response was truncated. Try generating fewer questions.", "error");
+    }
+    
+    let guessModeJson;
+    try {
+      guessModeJson = JSON.parse(guessModeContent);
+    } catch (parseError) {
+      console.error("Guess Mode JSON Parse Error:", parseError);
+      hideLoading();
+      disableDailyButton(false);
+      return showToast("❌ Failed to parse Guess Mode AI response.", "error");
+    }
+
+    // Step 3: Generate questions for No Cap Mode
+    updateLoading(`🤖 Generating ${count} questions for NO CAP MODE...\n⏳ This may take 30-60 seconds...`, 50);
+
+    const noCapModeResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        max_tokens: 16000
+      })
+    });
+
+    if (!noCapModeResponse.ok) {
+      const errorData = await noCapModeResponse.json().catch(() => ({}));
+      hideLoading();
+      disableDailyButton(false);
+      
+      if (noCapModeResponse.status === 429) {
+        return showToast("⚠️ Rate limit exceeded. Please wait a few moments and try again.", "error");
+      } else {
+        return showToast(`❌ OpenAI API error (${noCapModeResponse.status}): ${errorData.error?.message || 'Unknown error'}`, "error");
+      }
+    }
+
+    updateLoading("📥 Receiving No Cap Mode response...", 70);
+    const noCapModeData = await noCapModeResponse.json();
+    
+    const noCapModeContent = noCapModeData.choices[0].message.content;
+    
+    if (noCapModeData.choices[0].finish_reason === 'length') {
+      hideLoading();
+      disableDailyButton(false);
+      return showToast("⚠️ No Cap Mode response was truncated. Try generating fewer questions.", "error");
+    }
+    
+    let noCapModeJson;
+    try {
+      noCapModeJson = JSON.parse(noCapModeContent);
+    } catch (parseError) {
+      console.error("No Cap Mode JSON Parse Error:", parseError);
+      hideLoading();
+      disableDailyButton(false);
+      return showToast("❌ Failed to parse No Cap Mode AI response.", "error");
+    }
+
+    // Step 4: Upload to Firestore using Cloud Function
+    updateLoading(`⬆️ Uploading questions to Firestore...`, 80);
+
+    const cloudFn =
+      "https://us-central1-emojivia-f5bd5.cloudfunctions.net/createDailyMissionQuestions";
+
+    // Upload Guess Mode
+    const guessModeRes = await fetch(cloudFn + "?date=" + formattedDate + "&mode=guess_mode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(guessModeJson),
+    });
+
+    let guessModeResult;
+    try {
+      guessModeResult = await guessModeRes.json();
+    } catch (e) {
+      const errorText = await guessModeRes.text();
+      console.error("Guess Mode Response Error:", errorText);
+      hideLoading();
+      disableDailyButton(false);
+      return showToast("❌ Guess Mode upload failed: " + errorText, "error");
+    }
+
+    if (!guessModeRes.ok) {
+      console.error("Guess Mode upload failed:", guessModeResult);
+      hideLoading();
+      disableDailyButton(false);
+      return showToast("❌ Guess Mode upload failed: " + (guessModeResult.message || JSON.stringify(guessModeResult)), "error");
+    }
+
+    updateLoading(`⬆️ Uploading No Cap Mode questions...`, 90);
+
+    // Upload No Cap Mode
+    const noCapModeRes = await fetch(cloudFn + "?date=" + formattedDate + "&mode=no_cap_mode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(noCapModeJson),
+    });
+
+    const noCapModeResult = await noCapModeRes.json();
+
+    updateLoading("✅ Finalizing...", 95);
+
+    if (noCapModeRes.ok) {
+      updateLoading("🎉 Success!", 100);
+      setTimeout(() => {
+        hideLoading();
+        disableDailyButton(false);
+        showToast(`🎉 Successfully created daily mission for ${formattedDate}!\n✅ Guess Mode: ${guessModeJson.length} questions\n✅ No Cap Mode: ${noCapModeJson.length} questions`, "success");
+      }, 500);
+    } else {
+      hideLoading();
+      disableDailyButton(false);
+      showToast("❌ No Cap Mode upload failed: " + (noCapModeResult.message || "Unknown error"), "error");
+    }
+  } catch (err) {
+    hideLoading();
+    disableDailyButton(false);
+    showToast("❌ Network error: " + err.message, "error");
+  }
+}
+
+function disableDailyButton(disabled) {
+  const btn = document.getElementById("generateDailyBtn");
+  btn.disabled = disabled;
+  btn.innerText = disabled ? "⏳ Generating..." : "Generate & Upload Daily Mission";
+}
