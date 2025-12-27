@@ -577,7 +577,9 @@ async function fetchCategories() {
     }
 
     // Extract category values from the array
-    const categories = categoryDoc.fields.categories.arrayValue.values.map(v => v.stringValue);
+    let categories = categoryDoc.fields.categories.arrayValue.values.map(v => v.stringValue);
+    const formattedCategories = categories.map(c => c.split('|')[0]);
+    categories = formattedCategories;
     console.log("Extracted categories:", categories);
     return categories;
   } catch (error) {
