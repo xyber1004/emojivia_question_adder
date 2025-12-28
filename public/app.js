@@ -35,10 +35,10 @@ async function generateTriviaId(category) {
   const url =
     "https://firestore.googleapis.com/v1/projects/emojivia-f5bd5/databases/(default)/documents/trivia";
 
-  const res = await fetch(url);
+  const res = await fetch(url + "?pageSize=1000");
   const data = await res.json();
 
-  if (!data.documents) return prefix + "1";
+  if (!data.documents || data.documents.length === 0) return prefix + "1";
 
   let maxIndex = 0;
 
@@ -101,9 +101,10 @@ Return ONLY a JSON array. Format:
 Rules:
 - JSON array only.
 - id starts at 1.
-- question is ONLY emojis.
+- question is ONLY emojis with minimum 5 emojis and maximum 8 emojis.
 - 4 options.
 - answer must match one option exactly.
+- If any answer or option contains a number (e.g., 'Toy Story 2'), always include the corresponding number emoji (e.g., '2️⃣') in the emoji question.
 Topic: ${topic}
 `;
 
@@ -119,12 +120,12 @@ Topic: ${topic}
         "Authorization": `Bearer ${OPENAI_API_KEY}`
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: "gpt-5.2",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
         ],
-        max_tokens: 16000 // Increased to handle larger responses
+        max_completion_tokens: 16000 // Increased to handle larger responses
       })
     });
 
@@ -346,9 +347,10 @@ Return ONLY a JSON array. Format:
 Rules:
 - JSON array only.
 - id starts at 1.
-- question is ONLY emojis.
+- question is ONLY emojis with minimum 5 emojis and maximum 8 emojis.
 - 4 options.
 - answer must match one option exactly.
+- If any answer or option contains a number (e.g., 'Toy Story 2'), always include the corresponding number emoji (e.g., '2️⃣') in the emoji question.
 Topic: ${topic}
 `;
 
@@ -367,7 +369,7 @@ Topic: ${topic}
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
         ],
-        max_tokens: 16000
+        max_completion_tokens: 16000
       })
     });
 
@@ -423,7 +425,7 @@ Topic: ${topic}
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
         ],
-        max_tokens: 16000
+        max_completion_tokens: 16000
       })
     });
 

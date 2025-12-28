@@ -35,6 +35,15 @@ exports.createTriviaQuestions = functions.https.onRequest(async (req, res) => {
     }
 
     const batch = db.batch();
+
+    // Create/update the parent trivia document with userId array
+    const triviaDocRef = db.collection("trivia").doc(triviaId);
+    batch.set(triviaDocRef, {
+      userId: [], // Initialize empty userId array for future use
+      created: admin.firestore.FieldValue.serverTimestamp(),
+      questionCount: questions.length,
+    }, {merge: true});
+
     const col = db.collection("trivia").doc(triviaId).collection("questions");
 
     for (const q of questions) {
